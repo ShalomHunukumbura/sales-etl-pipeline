@@ -1,0 +1,18 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+logs/
+data/raw/*
+!data/raw/sales_raw.csv
+data/processed/*
+data/rejected/*
+!data/**/.gitkeep
+.DS_Store
+.idea/
+.vscode/
+
+# personal / assessment files (not part of the submission)
+*.pdf
+interview-study-guide.md

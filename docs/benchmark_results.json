@@ -1,0 +1,62 @@
+{
+  "q1_top_categories_by_revenue": {
+    "before_ms": 178.187,
+    "before_pages": 14818,
+    "before_nodes": [
+      "Seq Scan"
+    ],
+    "after_ms": 126.867,
+    "after_pages": 857,
+    "after_nodes": [
+      "Index Only Scan using idx_fact_sales_date_covering"
+    ]
+  },
+  "q2_monthly_revenue_growth": {
+    "before_ms": 170.055,
+    "before_pages": 14787,
+    "before_nodes": [
+      "Seq Scan"
+    ],
+    "after_ms": 148.167,
+    "after_pages": 810,
+    "after_nodes": [
+      "Index Only Scan using idx_fact_sales_date_covering"
+    ]
+  },
+  "q3_avg_rating_by_country": {
+    "before_ms": 234.969,
+    "before_pages": 14818,
+    "before_nodes": [
+      "Seq Scan"
+    ],
+    "after_ms": 146.922,
+    "after_pages": 857,
+    "after_nodes": [
+      "Index Only Scan using idx_fact_sales_date_covering"
+    ]
+  },
+  "q4_top_customers_lifetime_value": {
+    "before_ms": 597.873,
+    "before_pages": 14887,
+    "before_nodes": [
+      "Seq Scan"
+    ],
+    "after_ms": 679.257,
+    "after_pages": 14887,
+    "after_nodes": [
+      "Seq Scan"
+    ]
+  },
+  "q5_customer_order_history": {
+    "before_ms": 105.858,
+    "before_pages": 14795,
+    "before_nodes": [
+      "Seq Scan"
+    ],
+    "after_ms": 0.803,
+    "after_pages": 18,
+    "after_nodes": [
+      "Bitmap Heap Scan"
+    ]
+  }
+}

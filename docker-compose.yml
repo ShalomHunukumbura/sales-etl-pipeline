@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sales_etl_postgres
+    environment:
+      POSTGRES_DB: ${PG_DATABASE:-sales_dw}
+      POSTGRES_USER: ${PG_USER:-etl_user}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?Set PG_PASSWORD in .env}
+    ports:
+      - "${PG_PORT:-5434}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Scripts in this folder run once, on first container start, in name order.
+      - ./sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./sql/02_indexes.sql:/docker-entrypoint-initdb.d/02_indexes.sql:ro
+      - ./sql:/sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
