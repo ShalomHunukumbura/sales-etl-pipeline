@@ -25,12 +25,6 @@ EXPECTED_COLUMNS = [
 
 
 def extract(path: Path) -> pd.DataFrame:
-    """Load the raw file with every column as a string.
-
-    Reading as `str` (and disabling pandas' NA auto-detection) means nothing is
-    silently coerced on the way in: all type conversion happens explicitly in
-    the transform step, where failures can be tracked and rejected.
-    """
     if not path.exists():
         raise FileNotFoundError(f"Raw input not found: {path}")
 

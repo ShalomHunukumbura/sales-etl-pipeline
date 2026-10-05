@@ -1,10 +1,3 @@
-"""Central configuration, read exclusively from environment variables.
-
-Values come from the process environment, optionally populated from a local
-`.env` file (git-ignored). Nothing secret is ever hard-coded here; boto3 picks
-up AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from the environment itself.
-"""
-
 from __future__ import annotations
 
 import os

@@ -1,16 +1,3 @@
-"""S3 integration: land the raw file and back up processed outputs.
-
-Credentials are NEVER passed in code. boto3 resolves them through its default
-provider chain: environment variables (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY,
-loaded from .env) locally, or an attached IAM role on EC2/ECS/Lambda/MWAA.
-
-Object layout (Hive-style partitions so Athena/Glue/Spark can prune by date):
-
-    s3://<bucket>/<prefix>/raw/ingest_date=YYYY-MM-DD/run_id=<uuid>/sales_raw.csv
-    s3://<bucket>/<prefix>/processed/ingest_date=YYYY-MM-DD/run_id=<uuid>/sales_clean.parquet
-    s3://<bucket>/<prefix>/rejected/ingest_date=YYYY-MM-DD/run_id=<uuid>/rejected.csv
-"""
-
 from __future__ import annotations
 
 import hashlib

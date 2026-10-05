@@ -1,10 +1,3 @@
-"""Validate step: enforce business constraints and split good rows from rejects.
-
-Rules mirror the CHECK constraints in sql/01_schema.sql, so a row that passes
-here will never violate a database constraint at load time (fail early, with a
-readable reason, instead of failing the whole COPY).
-"""
-
 from __future__ import annotations
 
 import logging

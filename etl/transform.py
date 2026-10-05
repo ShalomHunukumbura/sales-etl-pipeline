@@ -1,10 +1,3 @@
-"""Transform step: clean missing values, standardize formats, remove duplicates.
-
-Every conversion is explicit and vectorized. Values that cannot be converted
-become NaN/NaT here and are turned into reject reasons by `etl.validate`,
-so nothing is silently dropped.
-"""
-
 from __future__ import annotations
 
 import logging

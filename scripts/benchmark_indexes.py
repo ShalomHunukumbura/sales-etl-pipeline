@@ -1,21 +1,3 @@
-"""Benchmark the analytical queries with and without the secondary indexes.
-
-At ~11k rows every query runs in a few milliseconds and PostgreSQL correctly
-prefers sequential scans, so indexes can't show any benefit. To show their
-effect realistically, this script:
-
-1. builds an isolated `bench` schema with a fact_sales copy inflated to
-   1,000,000 rows (sampled from the real cleaned data, dates spread over
-   2018-2025). It shares the real dimension tables.
-2. runs every query in sql/03_analytical_queries.sql N times WITHOUT the
-   secondary indexes from sql/02_indexes.sql (only the PK exists)
-3. creates those indexes, VACUUM ANALYZEs, and runs the queries again
-4. writes plans and median timings to docs/benchmark_results.md
-5. drops the bench schema (unless --keep)
-
-    python scripts/benchmark_indexes.py [--rows 1000000] [--runs 5] [--keep]
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -39,10 +21,23 @@ INDEXES_FILE = PROJECT_ROOT / "sql" / "02_indexes.sql"
 OUTPUT_FILE = PROJECT_ROOT / "docs" / "benchmark_results.md"
 
 
+QUERY_NAMES = [
+    "q1_top_categories_by_revenue",
+    "q2_monthly_revenue_growth",
+    "q3_avg_rating_by_country",
+    "q4_top_customers_lifetime_value",
+    "q5_customer_order_history",
+]
+
+
 def load_queries() -> dict[str, str]:
     text = QUERIES_FILE.read_text()
     parts = re.split(r"^-- name: (\S+)\s*$", text, flags=re.M)
-    return {parts[i]: parts[i + 1].strip().rstrip(";") for i in range(1, len(parts), 2)}
+    if len(parts) > 1:
+        return {parts[i]: parts[i + 1].strip().rstrip(";") for i in range(1, len(parts), 2)}
+    statements = [s.strip() for s in text.split(";") if s.strip()]
+    names = QUERY_NAMES + [f"q{i}" for i in range(len(QUERY_NAMES) + 1, len(statements) + 1)]
+    return dict(zip(names, statements))
 
 
 def fact_index_statements() -> list[str]:

@@ -1,11 +1,3 @@
-"""Prove the pipeline's IAM user is least-privilege.
-
-Uses the same credentials as the pipeline (from .env) and tries a few actions.
-The allowed ones should succeed; everything else should fail with AccessDenied.
-
-    python scripts/check_s3_permissions.py
-"""
-
 from __future__ import annotations
 
 import sys

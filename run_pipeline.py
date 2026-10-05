@@ -1,16 +1,3 @@
-"""Run the sales ETL pipeline end to end.
-
-    python run_pipeline.py                     # default input data/raw/sales_raw.csv
-    python run_pipeline.py --generate          # (re)generate the raw dataset first
-    python run_pipeline.py --skip-s3           # run fully local, no AWS calls
-    python run_pipeline.py --input path.csv
-
-Stages:
-    extract -> [S3: land raw] -> standardize -> deduplicate -> validate
-            -> write processed + rejected files -> load PostgreSQL
-            -> [S3: back up processed + rejected]
-"""
-
 from __future__ import annotations
 
 import argparse

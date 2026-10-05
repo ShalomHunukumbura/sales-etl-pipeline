@@ -1,15 +1,3 @@
-"""Load step: bulk-load into staging with COPY, then merge into the star schema.
-
-Why this shape:
-* COPY is the fastest way to move rows into PostgreSQL (orders of magnitude
-  faster than row-by-row INSERTs).
-* The merge (dimension upserts + fact upsert) runs in ONE transaction, so a
-  run either lands completely or not at all.
-* `INSERT ... ON CONFLICT (order_id) DO UPDATE ... WHERE IS DISTINCT FROM`
-  makes re-runs idempotent: unchanged rows are not rewritten, corrected rows
-  are updated, new rows are inserted.
-"""
-
 from __future__ import annotations
 
 import io

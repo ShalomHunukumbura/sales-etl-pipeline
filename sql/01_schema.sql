@@ -1,12 +1,3 @@
--- =====================================================================
---  Sales data warehouse schema (PostgreSQL 16)
---  Star schema: one fact table (fact_sales) + small dimension tables,
---  plus operational tables for the ETL (staging, audit, rejects).
--- =====================================================================
-
--- ---------------------------------------------------------------------
---  ETL audit: one row per pipeline execution
--- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS etl_runs (
     run_id            UUID         PRIMARY KEY,
     source_file       TEXT         NOT NULL,
@@ -22,9 +13,6 @@ CREATE TABLE IF NOT EXISTS etl_runs (
     error_message     TEXT
 );
 
--- ---------------------------------------------------------------------
---  Dimensions
--- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS dim_customer (
     customer_id    SERIAL        PRIMARY KEY,
     email          VARCHAR(255)  NOT NULL UNIQUE,      -- natural key
@@ -46,9 +34,7 @@ CREATE TABLE IF NOT EXISTS dim_country (
     country_name   VARCHAR(100)  NOT NULL UNIQUE       -- natural key
 );
 
--- ---------------------------------------------------------------------
---  Fact table: grain = one order line (one product per order_id)
--- ---------------------------------------------------------------------
+
 CREATE TABLE IF NOT EXISTS fact_sales (
     order_id        VARCHAR(20)    PRIMARY KEY,
     customer_id     INTEGER        REFERENCES dim_customer (customer_id),  -- NULL = unknown customer
@@ -69,10 +55,6 @@ CREATE TABLE IF NOT EXISTS fact_sales (
     CONSTRAINT chk_order_date_range CHECK (order_date BETWEEN DATE '2000-01-01' AND DATE '2100-01-01')
 );
 
--- ---------------------------------------------------------------------
---  Staging: bulk-loaded with COPY each run, then merged into the star.
---  UNLOGGED = no WAL writes -> much faster loads; contents are transient.
--- ---------------------------------------------------------------------
 CREATE UNLOGGED TABLE IF NOT EXISTS staging_sales (
     order_id        VARCHAR(20),
     customer_name   VARCHAR(150),
@@ -87,9 +69,7 @@ CREATE UNLOGGED TABLE IF NOT EXISTS staging_sales (
     payment_method  VARCHAR(30)
 );
 
--- ---------------------------------------------------------------------
---  Rejected records ("dead-letter" table) for data-quality follow-up
--- ---------------------------------------------------------------------
+
 CREATE TABLE IF NOT EXISTS rejected_records (
     reject_id      BIGSERIAL     PRIMARY KEY,
     run_id         UUID          NOT NULL REFERENCES etl_runs (run_id),

@@ -1,20 +1,3 @@
-"""Generate a synthetic, deliberately *dirty* sales-transactions dataset.
-
-The goal is to simulate a real-world raw export (e.g. from a POS / e-commerce
-system) with the kinds of problems a data engineer actually has to deal with:
-
-* exact duplicate rows and duplicate order_ids with formatting differences
-* missing values (rating, country, category, email, price, product)
-* mixed date formats and some unparseable / future dates
-* inconsistent casing, stray whitespace, country aliases
-* prices stored as strings with currency symbols and thousands separators
-* out-of-range values (negative quantity, rating 7, invalid emails)
-
-Usage:
-    python scripts/generate_data.py                       # 12,000 rows -> data/raw/sales_raw.csv
-    python scripts/generate_data.py --rows 50000 --seed 7
-"""
-
 from __future__ import annotations
 
 import argparse
