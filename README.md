@@ -366,6 +366,7 @@ s3://<bucket>/sales-etl/rejected/ingest_date=2026-10-05/run_id=<uuid>/rejected.c
    AWS_SECRET_ACCESS_KEY=...
    ```
 6. `python run_pipeline.py` and check the objects in the S3 console.
+7. `python scripts/check_s3_permissions.py` proves the policy works: listing its own prefix is allowed, while delete, writing outside the prefix and listing other buckets are all `AccessDenied`.
 
 boto3 reads credentials from the environment through its default provider chain, so the code never handles keys. Environment variables take precedence over `~/.aws/credentials`, so make sure `.env` holds the *pipeline* user's keys and not a personal admin key. In production on AWS (EC2, ECS, Lambda, MWAA) you'd **delete the access key** and attach the same policy to an **IAM role**, giving short-lived credentials with nothing to leak.
 
@@ -456,7 +457,8 @@ Tasks pass data through S3 paths, not XCom payloads. `{{ ds }}` makes every run 
 │   └── s3.py                    # boto3 upload / verify, partitioned keys, SSE
 ├── scripts/
 │   ├── generate_data.py         # synthetic dirty dataset (seeded)
-│   └── benchmark_indexes.py     # 1M-row with/without-index benchmark
+│   ├── benchmark_indexes.py     # 1M-row with/without-index benchmark
+│   └── check_s3_permissions.py  # verifies the IAM policy is least-privilege
 ├── sql/
 │   ├── 01_schema.sql            # tables, PKs, FKs, CHECK constraints
 │   ├── 02_indexes.sql           # indexes + reasoning
