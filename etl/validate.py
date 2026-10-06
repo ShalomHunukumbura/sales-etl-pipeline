@@ -47,17 +47,22 @@ def build_rules(df: pd.DataFrame, today: date) -> list[tuple[str, pd.Series]]:
     ]
 
 
-def validate(df: pd.DataFrame, today: date | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Return (valid_rows, rejected_rows). Rejected rows carry every failed rule."""
-    today = today or date.today()
+def failure_reasons(df: pd.DataFrame, today: date | None = None, log_counts: bool = False) -> pd.Series:
+    """Per row, every rule it fails joined with "; " ("" = valid)."""
     reasons = pd.Series("", index=df.index, dtype="string")
-
-    for reason, mask in build_rules(df, today):
+    for reason, mask in build_rules(df, today or date.today()):
         mask = mask.fillna(False).astype(bool)
         n = int(mask.sum())
         if n:
-            log.info("  rule failed: %-30s %5s rows", reason, n)
+            if log_counts:
+                log.info("  rule failed: %-30s %5s rows", reason, n)
             reasons = reasons.mask(mask, reasons.where(reasons == "", reasons + "; ") + reason)
+    return reasons
+
+
+def validate(df: pd.DataFrame, today: date | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return (valid_rows, rejected_rows). Rejected rows carry every failed rule."""
+    reasons = failure_reasons(df, today, log_counts=True)
 
     bad = reasons != ""
     rejected = df.loc[bad, ["source_row"]].assign(reject_reason=reasons[bad].astype(str))

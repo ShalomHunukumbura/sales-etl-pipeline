@@ -119,27 +119,22 @@ def _copy_to_staging(cur, df: pd.DataFrame) -> None:
     )
 
 
-def load_sales(conn, df: pd.DataFrame, run_id: str) -> tuple[int, int]:
-    """Load the validated frame. Returns (inserted, updated)."""
-    with conn, conn.cursor() as cur:  # single transaction: commit on success, rollback on error
-        cur.execute("TRUNCATE staging_sales")
-        _copy_to_staging(cur, df)
-        log.info("COPY -> staging_sales: %s rows", f"{len(df):,}")
+def _merge_sales(cur, df: pd.DataFrame, run_id: str) -> tuple[int, int]:
+    """COPY into staging and merge into the star schema. Returns (inserted, updated)."""
+    cur.execute("TRUNCATE staging_sales")
+    _copy_to_staging(cur, df)
+    log.info("COPY -> staging_sales: %s rows", f"{len(df):,}")
 
-        cur.execute(MERGE_DIMENSIONS_SQL)
-        cur.execute(MERGE_FACT_SQL, {"run_id": run_id})
-        flags = [row[0] for row in cur.fetchall()]
-        inserted, updated = sum(flags), len(flags) - sum(flags)
+    cur.execute(MERGE_DIMENSIONS_SQL)
+    cur.execute(MERGE_FACT_SQL, {"run_id": run_id})
+    flags = [row[0] for row in cur.fetchall()]
+    inserted, updated = sum(flags), len(flags) - sum(flags)
 
-        cur.execute("TRUNCATE staging_sales")
-        cur.execute("ANALYZE fact_sales")  # keep planner statistics fresh after a bulk load
-
-    log.info("Merged into fact_sales: %s inserted, %s updated, %s unchanged",
-             f"{inserted:,}", f"{updated:,}", f"{len(df) - inserted - updated:,}")
+    cur.execute("TRUNCATE staging_sales")
     return inserted, updated
 
 
-def load_rejects(conn, rejects: pd.DataFrame, raw: pd.DataFrame, run_id: str) -> None:
+def _insert_rejects(cur, rejects: pd.DataFrame, raw: pd.DataFrame, run_id: str) -> None:
     """Write rejected rows, with the original untouched record, to rejected_records."""
     if rejects.empty:
         return
@@ -148,11 +143,22 @@ def load_rejects(conn, rejects: pd.DataFrame, raw: pd.DataFrame, run_id: str) ->
         (run_id, int(r.source_row), r.reject_reason, Json(raw_by_row.loc[r.source_row].to_dict()))
         for r in rejects.itertuples(index=False)
     ]
-    with conn, conn.cursor() as cur:
-        execute_values(
-            cur,
-            "INSERT INTO rejected_records (run_id, source_row, reject_reason, raw_record) VALUES %s",
-            rows,
-            page_size=1000,
-        )
-    log.info("Logged %s rejected records to rejected_records", f"{len(rows):,}")
+    execute_values(
+        cur,
+        "INSERT INTO rejected_records (run_id, source_row, reject_reason, raw_record) VALUES %s",
+        rows,
+        page_size=1000,
+    )
+
+
+def load(conn, valid: pd.DataFrame, rejects: pd.DataFrame, raw: pd.DataFrame, run_id: str) -> tuple[int, int]:
+    """Load clean rows and rejects in ONE transaction. Returns (inserted, updated)."""
+    with conn, conn.cursor() as cur:  # commit on success, rollback on error
+        inserted, updated = _merge_sales(cur, valid, run_id)
+        _insert_rejects(cur, rejects, raw, run_id)
+        cur.execute("ANALYZE fact_sales")  # keep planner statistics fresh after a bulk load
+
+    log.info("Merged into fact_sales: %s inserted, %s updated, %s unchanged",
+             f"{inserted:,}", f"{updated:,}", f"{len(valid) - inserted - updated:,}")
+    log.info("Logged %s rejected records to rejected_records", f"{len(rejects):,}")
+    return inserted, updated

@@ -21,23 +21,13 @@ INDEXES_FILE = PROJECT_ROOT / "sql" / "02_indexes.sql"
 OUTPUT_FILE = PROJECT_ROOT / "docs" / "benchmark_results.md"
 
 
-QUERY_NAMES = [
-    "q1_top_categories_by_revenue",
-    "q2_monthly_revenue_growth",
-    "q3_avg_rating_by_country",
-    "q4_top_customers_lifetime_value",
-    "q5_customer_order_history",
-]
-
-
 def load_queries() -> dict[str, str]:
+    """Split the queries file on its `-- name: <id>` tags."""
     text = QUERIES_FILE.read_text()
     parts = re.split(r"^-- name: (\S+)\s*$", text, flags=re.M)
-    if len(parts) > 1:
-        return {parts[i]: parts[i + 1].strip().rstrip(";") for i in range(1, len(parts), 2)}
-    statements = [s.strip() for s in text.split(";") if s.strip()]
-    names = QUERY_NAMES + [f"q{i}" for i in range(len(QUERY_NAMES) + 1, len(statements) + 1)]
-    return dict(zip(names, statements))
+    if len(parts) < 2:
+        raise ValueError(f"No '-- name: <id>' tags found in {QUERIES_FILE.name}")
+    return {parts[i]: parts[i + 1].strip().rstrip(";") for i in range(1, len(parts), 2)}
 
 
 def fact_index_statements() -> list[str]:

@@ -13,11 +13,11 @@ import pandas as pd
 
 from etl.config import PROCESSED_DIR, PROJECT_ROOT, RAW_DIR, REJECTED_DIR, get_settings
 from etl.extract import extract
-from etl.load import connect, finish_run, load_rejects, load_sales, start_run
+from etl.load import connect, finish_run, load, start_run
 from etl.logger import setup_logging
 from etl.s3 import S3Store
 from etl.transform import deduplicate, standardize
-from etl.validate import validate
+from etl.validate import failure_reasons, validate
 
 log = logging.getLogger("pipeline")
 
@@ -51,6 +51,7 @@ def main() -> int:
         subprocess.run([sys.executable, str(PROJECT_ROOT / "scripts" / "generate_data.py"), "--output", str(args.input)], check=True)
 
     stats: dict[str, int] = {}
+    warehouse_committed = False
     t_start = time.perf_counter()
 
     with connect(settings.postgres) as conn:
@@ -66,7 +67,9 @@ def main() -> int:
 
             with stage("TRANSFORM"):
                 standardized = standardize(raw)
-                deduped, duplicates = deduplicate(raw, standardized)
+                # tell dedup which rows would pass validation, so a valid copy of an
+                # order_id is kept over an earlier invalid one
+                deduped, duplicates = deduplicate(raw, standardized, valid=failure_reasons(standardized) == "")
                 stats["duplicates"] = len(duplicates)
 
             with stage("VALIDATE"):
@@ -89,8 +92,8 @@ def main() -> int:
                 log.info("Wrote %s, %s, %s", clean_parquet.name, clean_csv.name, rejected_csv.name)
 
             with stage("LOAD POSTGRES"):
-                stats["inserted"], stats["updated"] = load_sales(conn, valid, run_id)
-                load_rejects(conn, all_rejects, raw, run_id)
+                stats["inserted"], stats["updated"] = load(conn, valid, all_rejects, raw, run_id)
+                warehouse_committed = True
 
             if s3:
                 with stage("S3 BACKUP"):
@@ -103,7 +106,14 @@ def main() -> int:
         except Exception as exc:
             conn.rollback()
             finish_run(conn, run_id, "failed", stats, error=f"{type(exc).__name__}: {exc}")
-            log.exception("Pipeline FAILED (run %s). Nothing partial was committed to fact_sales.", run_id)
+            if warehouse_committed:
+                log.exception(
+                    "Pipeline FAILED (run %s) AFTER the warehouse load was committed: fact_sales and "
+                    "rejected_records hold this run's rows (etl_run_id = %s). Fix the cause and re-run; "
+                    "the load is idempotent.", run_id, run_id,
+                )
+            else:
+                log.exception("Pipeline FAILED (run %s). Nothing was committed to fact_sales.", run_id)
             return 1
 
         finish_run(conn, run_id, "success", stats)

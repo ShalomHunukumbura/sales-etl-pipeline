@@ -1,3 +1,4 @@
+-- name: q1_top_categories_by_revenue
 SELECT p.category,
        COUNT(*)                                   AS orders,
        SUM(f.quantity)                            AS units_sold,
@@ -13,6 +14,7 @@ ORDER BY revenue DESC
 LIMIT 10;
 
 
+-- name: q2_monthly_revenue_growth
 WITH monthly AS (
     SELECT date_trunc('month', order_date::timestamp)::date AS month,
            COUNT(*)                              AS orders,
@@ -31,6 +33,7 @@ SELECT month,
 FROM monthly
 ORDER BY month;
 
+-- name: q3_avg_rating_by_country
 SELECT c.country_name,
        COUNT(f.rating)            AS ratings,
        ROUND(AVG(f.rating), 2)    AS avg_rating,
@@ -44,6 +47,7 @@ GROUP BY c.country_name
 HAVING COUNT(f.rating) >= 30
 ORDER BY avg_rating DESC;
 
+-- name: q4_top_customers_lifetime_value
 SELECT cu.customer_name,
        cu.email,
        COUNT(*)              AS orders,
@@ -56,6 +60,7 @@ GROUP BY cu.customer_id, cu.customer_name, cu.email
 ORDER BY lifetime_value DESC
 LIMIT 10;
 
+-- name: q5_customer_order_history
 SELECT f.order_id, f.order_date, p.product_name, f.quantity, f.total_amount
 FROM fact_sales f
 JOIN dim_product p ON p.product_id = f.product_id

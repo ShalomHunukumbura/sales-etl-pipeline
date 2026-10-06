@@ -53,7 +53,7 @@ Design principles:
 
 - **Nothing is silently dropped.** Every removed row ends up in `rejected_records` (and a CSV) with its original raw values and a human-readable reason.
 - **Idempotent.** Re-running on the same file inserts and updates nothing. A corrected file updates only the rows that changed. The upsert key is `order_id`.
-- **Atomic.** The warehouse load is one transaction, so a run lands completely or not at all.
+- **Atomic.** The warehouse load (dimensions, facts and rejects) is one transaction, so it lands completely or not at all.
 - **Auditable.** Every run gets a UUID. The `etl_runs` table records its counts and status, and every fact row records the `etl_run_id` that last wrote it. Each run also writes its own log file in `logs/`.
 - **No secrets in code.** All configuration comes from environment variables (`.env`, git-ignored).
 
@@ -65,7 +65,7 @@ Design principles:
 
 ```bash
 # 1. configure
-cp .env.example .env              # then edit PG_PASSWORD (and AWS values, see section 7)
+cp .env.example .env              # then edit PG_PASSWORD (S3 is off by default; see section 7 to enable it)
 
 # 2. start PostgreSQL 16. The schema and indexes are created automatically on first start.
 docker compose up -d
@@ -154,10 +154,10 @@ On top of this, ~3% of rows are **exact duplicates** (the same batch exported tw
 | Extract | [`etl/extract.py`](etl/extract.py) | Reads every column **as a string**, with pandas NA-guessing turned off, so nothing is coerced implicitly. Checks the expected columns are present and tags each row with its `source_row` number for traceability. |
 | Standardize | [`etl/transform.py`](etl/transform.py) | Trims whitespace and maps null tokens (`""`, `N/A`, `null`, `-`) to NULL. Converts names to title case and emails to lower case. Collapses product-name case variants onto the most frequent spelling (so `USB-C Hub` is not mangled to `Usb-C Hub`). Maps aliases for category, country and payment method. Parses prices (`$1,299.00` → `1299.00`) and dates, trying 5 explicit formats in a fixed order. |
 | Clean missing values | `transform.py` | Uses a policy per column (below). |
-| Deduplicate | `transform.py` | Pass 1 removes exact duplicate raw rows. Pass 2 removes duplicate normalized `order_id`s, keeping the first occurrence. |
+| Deduplicate | `transform.py` | Pass 1 removes exact duplicate raw rows. Pass 2 removes duplicate normalized `order_id`s, keeping the first occurrence that passes validation (or the first one if none does), so a broken first copy can't knock out a good later one. |
 | Validate | [`etl/validate.py`](etl/validate.py) | 19 vectorized rules that mirror the DB `CHECK` constraints. A row lists **every** rule it fails, e.g. `quantity <= 0; rating out of range 1-5`. |
-| Log rejects | `run_pipeline.py`, `etl/load.py` | Writes `data/rejected/rejected_<run_id>.csv` (reason + original values) and the `rejected_records` table (raw row as JSONB). |
-| Load | [`etl/load.py`](etl/load.py) | `COPY` → `staging_sales` (UNLOGGED), then one transaction that upserts the dimensions and the fact table, then `ANALYZE`. |
+| Log rejects | `run_pipeline.py`, `etl/load.py` | Writes `data/rejected/rejected_<run_id>.csv` (reason + original values) and the `rejected_records` table (raw row as JSONB), in the same transaction as the fact load. |
+| Load | [`etl/load.py`](etl/load.py) | `COPY` → `staging_sales` (UNLOGGED), upserts the dimensions and the fact table, inserts the rejects, then `ANALYZE`, all in one transaction. |
 | S3 | [`etl/s3.py`](etl/s3.py) | Lands the raw file before processing. Backs up the cleaned Parquet/CSV and the rejects file after loading. |
 
 ### Missing-value policy
@@ -304,7 +304,7 @@ At 11k rows every query runs in about 1 ms and PostgreSQL *correctly* ignores in
 | Q2 monthly growth (1 year) | Seq Scan → **Index Only Scan** | 14,787 → **810 (−95%)** | 170 → 148 ms |
 | Q3 rating by country (1 year) | Seq Scan → **Index Only Scan** | 14,818 → **857 (−94%)** | 235 → 147 ms |
 | Q4 customer LTV (all time) | Seq Scan → Seq Scan | 14,887 → 14,887 | ≈ same |
-| Q5 one customer's orders | Seq Scan → **Index Scan** | 14,795 → **18** | 106 → **0.8 ms (≈130×)** |
+| Q5 one customer's orders | Seq Scan → **Bitmap Index Scan** on `idx_fact_sales_customer_date` | 14,795 → **18** | 106 → **0.8 ms (≈130×)** |
 
 How to read these numbers honestly:
 
@@ -344,7 +344,7 @@ s3://<bucket>/sales-etl/rejected/ingest_date=2026-10-05/run_id=<uuid>/rejected.c
 - **Server-side encryption** (`AES256`) on every object, plus `run-id` and `source-md5` object metadata for lineage.
 - **Retries:** boto3 *standard* retry mode with 5 attempts and exponential backoff.
 - **Verification:** after uploading, the pipeline lists the run's prefixes and logs how many objects it wrote.
-- **Fail-fast:** if S3 is enabled and an upload fails, the run is marked `failed` in `etl_runs`.
+- **Fail-fast:** if S3 is enabled and an upload fails, the run is marked `failed` in `etl_runs`. The raw upload happens before the load, so a failure there commits nothing. A failure in the post-load backup leaves the committed warehouse rows in place (the log says so explicitly), and re-running is safe because the load is idempotent.
 
 ### Setup: IAM least privilege (Free Tier)
 
@@ -461,7 +461,7 @@ Tasks pass data through S3 paths, not XCom payloads. `{{ ds }}` makes every run 
 │   └── check_s3_permissions.py  # verifies the IAM policy is least-privilege
 ├── sql/
 │   ├── 01_schema.sql            # tables, PKs, FKs, CHECK constraints
-│   ├── 02_indexes.sql           # indexes + reasoning
+│   ├── 02_indexes.sql           # indexes (reasoning in section 6)
 │   └── 03_analytical_queries.sql
 ├── iam/s3-least-privilege-policy.json
 ├── docs/benchmark_results.md    # generated: timings, page counts, full EXPLAIN plans

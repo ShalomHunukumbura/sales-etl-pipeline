@@ -180,23 +180,31 @@ def standardize(raw: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def deduplicate(raw: pd.DataFrame, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def deduplicate(
+    raw: pd.DataFrame, df: pd.DataFrame, valid: pd.Series | None = None
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Remove duplicates in two passes.
 
     1. exact duplicates: identical raw rows (e.g. the same batch exported twice)
     2. business-key duplicates: same normalized order_id (e.g. " ord-000123").
-       The first occurrence in the file wins, which is deterministic and
-       matches "first write wins" semantics of the source.
+       The first *valid* occurrence in the file wins (`valid` marks rows that
+       pass validation), so a broken first copy can't knock out a good later
+       one. If no copy is valid, the first one is kept and gets rejected by
+       validation with its real reasons.
 
     Returns (deduplicated_df, duplicates_df). duplicates_df has a `reject_reason`.
     """
     raw_cols = [c for c in raw.columns if c != "source_row"]
     exact_mask = raw.duplicated(subset=raw_cols, keep="first").to_numpy()
+    is_valid = np.ones(len(df), dtype=bool) if valid is None else valid.to_numpy(dtype=bool)
 
-    remaining = df[~exact_mask]
-    key_mask_remaining = remaining["order_id"].notna() & remaining.duplicated(subset=["order_id"], keep="first")
+    # order the remaining rows valid-first, then by file position; the first per order_id wins
+    idx = np.flatnonzero(~exact_mask)
+    idx = idx[np.lexsort((idx, ~is_valid[idx]))]
+    ids = df["order_id"].iloc[idx]
+    key_dup = ids.notna().to_numpy() & ids.duplicated(keep="first").to_numpy()
     key_mask = np.zeros(len(df), dtype=bool)
-    key_mask[np.flatnonzero(~exact_mask)[key_mask_remaining.to_numpy()]] = True
+    key_mask[idx[key_dup]] = True
 
     dupes = pd.concat(
         [
@@ -210,4 +218,3 @@ def deduplicate(raw: pd.DataFrame, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.D
         int(exact_mask.sum()), int(key_mask.sum()),
     )
     return df[~(exact_mask | key_mask)].copy(), dupes
-
